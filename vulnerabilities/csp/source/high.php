@@ -1,4 +1,5 @@
 <?php
+
 $headerCSP = "Content-Security-Policy: script-src 'self';";
 
 header($headerCSP);
@@ -12,11 +13,11 @@ $page[ 'body' ] .= "
 }
 $page[ 'body' ] .= '
 <form name="csp" method="POST">
-	<p>The page makes a call to ' . DVWA_WEB_PAGE_TO_ROOT . '/vulnerabilities/csp/source/jsonp.php to load some code. Modify that page to run your own code.</p>
+	<p>Unlike the high level, this does a JSONP call but does not use a callback, instead it hardcodes the function to call.</p><p>The CSP settings only allow external JavaScript on the local server and no inline code.</p>
 	<p>1+2+3+4+5=<span id="answer"></span></p>
 	<input type="button" id="solve" value="Solve the sum" />
 </form>
 
-<script src="source/high.js"></script>
+<script src="source/impossible.js"></script>
 ';
 

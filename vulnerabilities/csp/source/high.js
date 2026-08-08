@@ -1,6 +1,6 @@
 function clickButton() {
     var s = document.createElement("script");
-    s.src = "source/jsonp.php?callback=solveSum";
+    s.src = "source/jsonp_impossible.php";
     document.body.appendChild(s);
 }
 
