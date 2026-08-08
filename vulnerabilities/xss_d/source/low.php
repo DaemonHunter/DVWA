@@ -1,5 +1,5 @@
 <?php
 
-# No protections, anything goes
+# Don't need to do anything, protection handled on the client side
 
 ?>

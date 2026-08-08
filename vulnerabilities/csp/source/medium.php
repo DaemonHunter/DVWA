@@ -1,13 +1,8 @@
 <?php
 
-$headerCSP = "Content-Security-Policy: script-src 'self' 'unsafe-inline' 'nonce-TmV2ZXIgZ29pbmcgdG8gZ2l2ZSB5b3UgdXA=';";
+$headerCSP = "Content-Security-Policy: script-src 'self';";
 
 header($headerCSP);
-
-// Disable XSS protections so that inline alert boxes will work
-header ("X-XSS-Protection: 0");
-
-# <script nonce="TmV2ZXIgZ29pbmcgdG8gZ2l2ZSB5b3UgdXA=">alert(1)</script>
 
 ?>
 <?php
@@ -18,8 +13,11 @@ $page[ 'body' ] .= "
 }
 $page[ 'body' ] .= '
 <form name="csp" method="POST">
-	<p>Whatever you enter here gets dropped directly into the page, see if you can get an alert box to pop up.</p>
-	<input size="50" type="text" name="include" value="" id="include" />
-	<input type="submit" value="Include" />
+	<p>Unlike the high level, this does a JSONP call but does not use a callback, instead it hardcodes the function to call.</p><p>The CSP settings only allow external JavaScript on the local server and no inline code.</p>
+	<p>1+2+3+4+5=<span id="answer"></span></p>
+	<input type="button" id="solve" value="Solve the sum" />
 </form>
+
+<script src="source/impossible.js"></script>
 ';
+

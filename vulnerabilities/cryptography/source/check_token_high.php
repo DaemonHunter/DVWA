@@ -1,6 +1,6 @@
 <?php
 
-require_once ("token_library_high.php");
+require_once ("token_library_impossible.php");
 
 $ret = "";
 

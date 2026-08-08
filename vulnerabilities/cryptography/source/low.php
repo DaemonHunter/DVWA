@@ -1,112 +1,70 @@
 <?php
 
-function xor_this($cleartext, $key) {
-    // Our output text
-    $outText = '';
+require ("token_library_impossible.php");
 
-    // Iterate through each character
-    for($i=0; $i<strlen($cleartext);) {
-        for($j=0; ($j<strlen($key) && $i<strlen($cleartext)); $j++,$i++) {
-            $outText .= $cleartext[$i] ^ $key[$j];
-        }
-    }
-    return $outText;
-}
-
-$key = "wachtwoord";
-
-$errors = "";
-$success = "";
-$messages = "";
-$encoded = null;
-$encode_radio_selected = " checked='checked' ";
-$decode_radio_selected = " ";
 $message = "";
 
-if ($_SERVER['REQUEST_METHOD'] == "POST") {
-	try {
-		if (array_key_exists ('message', $_POST)) {
-			$message = $_POST['message'];
-			if (array_key_exists ('direction', $_POST) && $_POST['direction'] == "decode") {
-				$encoded = xor_this (base64_decode ($message), $key);
-				$encode_radio_selected = " ";
-				$decode_radio_selected = " checked='checked' ";
-			} else {
-				$encoded = base64_encode(xor_this ($message, $key));
-			}
-		}
-		if (array_key_exists ('password', $_POST)) {
-			$password = $_POST['password'];
-			$decoded = xor_this (base64_decode ($password), $key);
-			if ($password == "Olifant") {
-				$success = "Welcome back user";
-			} else {
-				$errors = "Login Failed";
-			}
-		}
-	} catch(Exception $e) {
-		$errors = $e->getMessage();
-	}
-}
+$token_data = create_token();
 
 $html = "
+	<script>
+		function send_token() {
+
+			const url = 'source/check_token_impossible.php';
+			const data = document.getElementById ('token').value;
+
+			console.log (data);
+			 
+			fetch(url, { 
+					method: 'POST', 
+					headers: { 
+						'Content-Type': 'application/json' 
+					}, 
+					body: data
+				}) 
+				.then(response => { 
+					if (!response.ok) { 
+						throw new Error('Network response was not ok'); 
+				} 
+				return response.json(); 
+				}) 
+				.then(data => { 
+					console.log(data);
+					message_line = document.getElementById ('message');
+					if (data.status == 200) {
+						message_line.innerText = 'Welcome back ' + data.user + ' (' + data.level + ')';
+						message_line.setAttribute('class', 'success');
+					} else {
+						message_line.innerText = 'Error: ' + data.message;
+						message_line.setAttribute('class', 'warning');
+					}
+				}) 
+				.catch(error => { 
+					console.error('There was a problem with your fetch operation:', error); 
+			}); 
+
+		}
+	</script>
 		<p>
-		This super secure system will allow you to exchange messages with your friends without anyone else being able to read them. Use the box below to encode and decode messages.
+			You have managed to steal the following token from a user of the Impervious application.
 		</p>
-		<form name=\"xor\" method='post' action=\"" . $_SERVER['PHP_SELF'] . "\">
-			<p>
-				<label for='message'>Message:</lable><br />
-				<textarea style='width: 600px; height: 56px' id='message' name='message'>" . htmlentities ($message) . "</textarea>
-			</p>
-			<p>
-				<input type='radio' value='encode' name='direction' id='direction_encode' " . $encode_radio_selected . "><label for='direction_encode'>Encode</label> or 
-				<input type='radio' value='decode' name='direction' id='direction_decode' " . $decode_radio_selected . "><label for='direction_decode'>Decode</label>
-			</p>
-			<p>
-				<input type=\"submit\" value=\"Submit\">
-			</p>
-		</form>
-";
-
-if (!is_null ($encoded)) {
-	$html .= "
-			<p>
-				<label for='encoded'>Message:</lable><br />
-				<textarea readonly='readonly' style='width: 600px; height: 56px' id='encoded' name='encoded'>" . htmlentities ($encoded) . "</textarea>
-			</p>";
-}
-
-$html .= "
+		<p>
+			<textarea style='width: 600px; height: 23px'>" . htmlentities ($token_data) . "</textarea>
+		</p>
+		<p>
+			This being the impossible level, you should not be able to mess with the token in any useful way but feel free to try below.
+		</p>
 		<hr>
-		<p>
-		You have intercepted the following message, decode it and log in below.
-		</p>
-		<p>
-		<textarea readonly='readonly' style='width: 600px; height: 28px' id='encoded' name='encoded'>Lg4WGlQZChhSFBYSEB8bBQtPGxdNQSwEHREOAQY=</textarea>
-		</p>
-";
-
-if ($errors != "") {
-	$html .= '<div class="warning">' . $errors . '</div>';
-}
-
-if ($messages != "") {
-	$html .= '<div class="nearly">' . $messages . '</div>';
-}
-
-if ($success != "") {
-	$html .= '<div class="success">' . $success . '</div>';
-}
-
-$html .= "
-		<form name=\"ecb\" method='post' action=\"" . $_SERVER['PHP_SELF'] . "\">
+		<form name=\"check_token\" action=\"\">
+			<div id='message'></div>
 			<p>
-				<label for='password'>Password:</lable><br />
-<input type='password' id='password' name='password'>
+				<label for='token'>Token:</lable><br />
+				<textarea id='token' name='token' style='width: 600px; height: 23px'>" . htmlentities ($token_data) . "</textarea>
 			</p>
 			<p>
-				<input type=\"submit\" value=\"Login\">
+				<input type=\"button\" value=\"Submit\" onclick='send_token();'>
 			</p>
 		</form>
 ";
+
 ?>
