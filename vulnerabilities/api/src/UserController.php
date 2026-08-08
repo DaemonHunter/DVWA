@@ -37,6 +37,44 @@ class UserController
 		$this->version = $version;
 	}
 
+	// Whitelisted fields for POST (create) and PUT (update). Privileged fields
+	// like 'level' and 'id' are intentionally excluded to prevent mass assignment.
+	private const USER_WRITE_WHITELIST = ['firstName', 'lastName', 'username', 'password', 'name'];
+
+	private function checkToken() {
+		if (array_key_exists ("HTTP_AUTHORIZATION", $_SERVER)) {
+			$header = $_SERVER['HTTP_AUTHORIZATION'];
+			$bits = explode (" ", $header);
+			if (count ($bits) == 2) {
+				if (strtolower($bits[0]) == "bearer") {
+					return (Login::check_access_token($bits[1]));
+				}
+			}
+		}
+		return false;
+	}
+
+	// Returns the subject (user id) encoded in the Bearer token, or null.
+	private function getTokenSubject() {
+		if (array_key_exists ("HTTP_AUTHORIZATION", $_SERVER)) {
+			$header = $_SERVER['HTTP_AUTHORIZATION'];
+			$bits = explode (" ", $header);
+			if (count ($bits) == 2 && strtolower($bits[0]) == "bearer") {
+				return Login::get_token_subject($bits[1]);
+			}
+		}
+		return null;
+	}
+
+	// Returns the caller's level from the token subject, or 0 if unknown.
+	private function getCallerLevel() {
+		$subject = $this->getTokenSubject();
+		if ($subject !== null && array_key_exists($subject, $this->data)) {
+			return $this->data[$subject]->level;
+		}
+		return 0;
+	}
+
 	private function validateAdd($input)
 	{
 		if (! isset($input['name'])) {
@@ -57,6 +95,11 @@ class UserController
 			return false;
 		}
 		return true;
+	}
+
+	// Strip any fields not in the whitelist to prevent mass assignment.
+	private function filterWriteFields($input) {
+		return array_intersect_key($input, array_flip(self::USER_WRITE_WHITELIST));
 	}
 
     #[OAT\Get(
@@ -84,6 +127,21 @@ class UserController
 	
 	private function getUser($id)
 	{
+		if (!$this->checkToken()) {
+			$response['status_code_header'] = 'HTTP/1.1 401 Unauthorized';
+			$response['body'] = json_encode (array ("status" => "Invalid or missing token"));
+			return $response;
+		}
+
+		$subject = $this->getTokenSubject();
+		$callerLevel = $this->getCallerLevel();
+		// Non-admin callers may only retrieve their own record.
+		if ($callerLevel < 2 && $subject !== null && intval($subject) !== intval($id)) {
+			$response['status_code_header'] = 'HTTP/1.1 403 Forbidden';
+			$response['body'] = json_encode (array ("status" => "Access denied"));
+			return $response;
+		}
+
 		if (!array_key_exists ($id, $this->data)) {
 			$gc = new GenericController("notFound");
 			$gc->processRequest();
@@ -92,7 +150,7 @@ class UserController
 		$response['status_code_header'] = 'HTTP/1.1 200 OK';
 		$response['body'] = json_encode ($this->data[$id]->toArray($this->version));
 		return $response;
-	}	
+	}
 
     #[OAT\Get(
 		tags: ["user"],
@@ -113,6 +171,12 @@ class UserController
     ]  
 
 	private function getAllUsers() {
+		if (!$this->checkToken()) {
+			$response['status_code_header'] = 'HTTP/1.1 401 Unauthorized';
+			$response['body'] = json_encode (array ("status" => "Invalid or missing token"));
+			return $response;
+		}
+
 		$response['status_code_header'] = 'HTTP/1.1 200 OK';
 		$all = array();
 		foreach ($this->data as $user) {
@@ -153,18 +217,29 @@ class UserController
 
 	private function addUser()
 	{
+		if (!$this->checkToken()) {
+			$response['status_code_header'] = 'HTTP/1.1 401 Unauthorized';
+			$response['body'] = json_encode (array ("status" => "Invalid or missing token"));
+			return $response;
+		}
+
 		$ret = Helpers::check_content_type();
 		if ($ret !== true) {
 			return $ret;
 		}
 
 		$input = (array) json_decode(file_get_contents('php://input'), TRUE);
+
+		// Strip privileged / unexpected fields before any validation.
+		$input = $this->filterWriteFields($input);
+
 		if (! $this->validateAdd($input)) {
 			$gc = new GenericController("unprocessable");
 			$gc->processRequest();
 			exit();
 		}
-		$user = new User(null, $input['name'], intval ($input['level']), hash ("sha256", "password"));
+		// 'level' is stripped by whitelist; new users always get level 0.
+		$user = new User(null, $input['name'], 0, hash ("sha256", "password"));
 		$this->data[] = $user;
 		$response['status_code_header'] = 'HTTP/1.1 201 Created';
 		$response['body'] = json_encode($user->toArray($this->version));
@@ -207,12 +282,31 @@ class UserController
 	
 	private function updateUser($id)
 	{
+		if (!$this->checkToken()) {
+			$response['status_code_header'] = 'HTTP/1.1 401 Unauthorized';
+			$response['body'] = json_encode (array ("status" => "Invalid or missing token"));
+			return $response;
+		}
+
+		$subject = $this->getTokenSubject();
+		$callerLevel = $this->getCallerLevel();
+		// Non-admin callers may only update their own record.
+		if ($callerLevel < 2 && $subject !== null && intval($subject) !== intval($id)) {
+			$response['status_code_header'] = 'HTTP/1.1 403 Forbidden';
+			$response['body'] = json_encode (array ("status" => "Access denied"));
+			return $response;
+		}
+
 		if (!array_key_exists ($id, $this->data)) {
 			$gc = new GenericController("notFound");
 			$gc->processRequest();
 			exit();
 		}
 		$input = (array) json_decode(file_get_contents('php://input'), TRUE);
+
+		// Strip privileged / unexpected fields to prevent mass assignment.
+		$input = $this->filterWriteFields($input);
+
 		if (! $this->validateUpdate($input)) {
 			$gc = new GenericController("unprocessable");
 			$gc->processRequest();
@@ -221,9 +315,7 @@ class UserController
 		if (array_key_exists ("name", $input)) {
 			$this->data[$id]->name = $input['name'];
 		}
-		if (array_key_exists ("level", $input)) {
-			$this->data[$id]->level = intval ($input['level']);
-		}
+		// 'level' is intentionally excluded from the whitelist; it cannot be changed here.
 		$response['status_code_header'] = 'HTTP/1.1 200 OK';
 		$response['body'] = json_encode ($this->data[$id]->toArray($this->version));
 		return $response;
@@ -251,6 +343,21 @@ class UserController
     ]  
 	
 	private function deleteUser($id) {
+		if (!$this->checkToken()) {
+			$response['status_code_header'] = 'HTTP/1.1 401 Unauthorized';
+			$response['body'] = json_encode (array ("status" => "Invalid or missing token"));
+			return $response;
+		}
+
+		$subject = $this->getTokenSubject();
+		$callerLevel = $this->getCallerLevel();
+		// Non-admin callers may only delete their own record.
+		if ($callerLevel < 2 && $subject !== null && intval($subject) !== intval($id)) {
+			$response['status_code_header'] = 'HTTP/1.1 403 Forbidden';
+			$response['body'] = json_encode (array ("status" => "Access denied"));
+			return $response;
+		}
+
 		if (!array_key_exists ($id, $this->data)) {
 			$gc = new GenericController("notFound");
 			$gc->processRequest();
