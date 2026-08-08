@@ -37,15 +37,13 @@ class UserController
 		$this->version = $version;
 	}
 
+	// Whitelisted fields for POST (create) and PUT (update). Privileged fields
+	// like 'level' and 'id' are intentionally excluded to prevent mass assignment.
+	private const USER_WRITE_WHITELIST = ['firstName', 'lastName', 'username', 'password', 'name'];
+
 	private function validateAdd($input)
 	{
 		if (! isset($input['name'])) {
-			return false;
-		}
-		if (! isset($input['level'])) {
-			return false;
-		}
-		if (!is_numeric ($input['level'])) {
 			return false;
 		}
 		return true;
@@ -57,6 +55,11 @@ class UserController
 			return false;
 		}
 		return true;
+	}
+
+	// Strip any fields not in the whitelist to prevent mass assignment.
+	private function filterWriteFields($input) {
+		return array_intersect_key($input, array_flip(self::USER_WRITE_WHITELIST));
 	}
 
     #[OAT\Get(
@@ -79,9 +82,9 @@ class UserController
                 description: 'User not found.',
             ),
         ]
-    )   
-    ]  
-	
+    )
+    ]
+
 	private function getUser($id)
 	{
 		if (!array_key_exists ($id, $this->data)) {
@@ -92,7 +95,7 @@ class UserController
 		$response['status_code_header'] = 'HTTP/1.1 200 OK';
 		$response['body'] = json_encode ($this->data[$id]->toArray($this->version));
 		return $response;
-	}	
+	}
 
     #[OAT\Get(
 		tags: ["user"],
@@ -109,8 +112,8 @@ class UserController
                 )
             ),
         ]
-    )   
-    ]  
+    )
+    ]
 
 	private function getAllUsers() {
 		$response['status_code_header'] = 'HTTP/1.1 200 OK';
@@ -148,8 +151,8 @@ class UserController
                 description: 'Invalid user object provided',
             ),
         ]
-    )   
-    ]  
+    )
+    ]
 
 	private function addUser()
 	{
@@ -159,12 +162,17 @@ class UserController
 		}
 
 		$input = (array) json_decode(file_get_contents('php://input'), TRUE);
+
+		// Strip privileged / unexpected fields before any validation.
+		$input = $this->filterWriteFields($input);
+
 		if (! $this->validateAdd($input)) {
 			$gc = new GenericController("unprocessable");
 			$gc->processRequest();
 			exit();
 		}
-		$user = new User(null, $input['name'], intval ($input['level']), hash ("sha256", "password"));
+		// 'level' is stripped by whitelist; new users always get level 0.
+		$user = new User(null, $input['name'], 0, hash ("sha256", "password"));
 		$this->data[] = $user;
 		$response['status_code_header'] = 'HTTP/1.1 201 Created';
 		$response['body'] = json_encode($user->toArray($this->version));
@@ -202,9 +210,9 @@ class UserController
                 description: 'Invalid user object provided',
             ),
         ]
-    )   
-    ]  
-	
+    )
+    ]
+
 	private function updateUser($id)
 	{
 		if (!array_key_exists ($id, $this->data)) {
@@ -213,6 +221,10 @@ class UserController
 			exit();
 		}
 		$input = (array) json_decode(file_get_contents('php://input'), TRUE);
+
+		// Strip privileged / unexpected fields to prevent mass assignment.
+		$input = $this->filterWriteFields($input);
+
 		if (! $this->validateUpdate($input)) {
 			$gc = new GenericController("unprocessable");
 			$gc->processRequest();
@@ -221,13 +233,11 @@ class UserController
 		if (array_key_exists ("name", $input)) {
 			$this->data[$id]->name = $input['name'];
 		}
-		if (array_key_exists ("level", $input)) {
-			$this->data[$id]->level = intval ($input['level']);
-		}
+		// 'level' is intentionally excluded from the whitelist; it cannot be changed here.
 		$response['status_code_header'] = 'HTTP/1.1 200 OK';
 		$response['body'] = json_encode ($this->data[$id]->toArray($this->version));
 		return $response;
-	}	
+	}
 
     #[OAT\Delete(
 		tags: ["user"],
@@ -247,9 +257,9 @@ class UserController
                 description: 'User not found',
             ),
         ]
-    )   
-    ]  
-	
+    )
+    ]
+
 	private function deleteUser($id) {
 		if (!array_key_exists ($id, $this->data)) {
 			$gc = new GenericController("notFound");

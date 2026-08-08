@@ -85,7 +85,22 @@ class HealthController
 		if (array_key_exists ("target", $input)) {
 			$target = $input['target'];
 
-			exec ("ping -c 4 " . $target, $output, $ret_var);
+			// Validate that target is a strict IPv4 dotted-quad (mirrors DVWA impossible.php pattern).
+			if (!preg_match('/^(\d{1,3}\.){3}\d{1,3}$/', $target)) {
+				$response['status_code_header'] = 'HTTP/1.1 400 Bad Request';
+				$response['body'] = json_encode (array ("status" => "Invalid target: must be an IPv4 address"));
+				return $response;
+			}
+			$octets = explode('.', $target);
+			foreach ($octets as $octet) {
+				if (intval($octet) > 255) {
+					$response['status_code_header'] = 'HTTP/1.1 400 Bad Request';
+					$response['body'] = json_encode (array ("status" => "Invalid target: octet out of range"));
+					return $response;
+				}
+			}
+
+			exec ("ping -c 4 " . escapeshellarg($target), $output, $ret_var);
 
 			if ($ret_var == 0) {
 				$response['status_code_header'] = 'HTTP/1.1 200 OK';
