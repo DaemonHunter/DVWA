@@ -1,44 +1,55 @@
 <?php
 
-function xor_this($cleartext, $key) {
-    // Our output text
-    $outText = '';
+// Hardened: replaced XOR cipher with AES-256-GCM authenticated encryption.
+// Per-invocation random IV prevents ciphertext analysis and block manipulation.
 
-    // Iterate through each character
-    for($i=0; $i<strlen($cleartext);) {
-        for($j=0; ($j<strlen($key) && $i<strlen($cleartext)); $j++,$i++) {
-            $outText .= $cleartext[$i] ^ $key[$j];
-        }
-    }
-    return $outText;
+function aes_gcm_encrypt ($plaintext, $key) {
+	$iv = random_bytes(12);
+	$e  = openssl_encrypt($plaintext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+	if ($e === false) {
+		throw new Exception ("Encryption failed");
+	}
+	return base64_encode ($iv . $e . $tag);
 }
 
-$key = "wachtwoord";
+function aes_gcm_decrypt ($encoded, $key) {
+	$raw        = base64_decode ($encoded);
+	$iv         = substr ($raw, 0, 12);
+	$tag        = substr ($raw, -16);
+	$ciphertext = substr ($raw, 12, -16);
+	$d = openssl_decrypt($ciphertext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+	if ($d === false) {
+		throw new Exception ("Decryption failed (authentication error)");
+	}
+	return $d;
+}
 
-$errors = "";
-$success = "";
+$key = hash ('sha256', "wachtwoord", true); // 32-byte key for AES-256
+
+$errors   = "";
+$success  = "";
 $messages = "";
-$encoded = null;
+$encoded  = null;
 $encode_radio_selected = " checked='checked' ";
 $decode_radio_selected = " ";
-$message = "";
+$message  = "";
 
 if ($_SERVER['REQUEST_METHOD'] == "POST") {
 	try {
 		if (array_key_exists ('message', $_POST)) {
 			$message = $_POST['message'];
 			if (array_key_exists ('direction', $_POST) && $_POST['direction'] == "decode") {
-				$encoded = xor_this (base64_decode ($message), $key);
+				$encoded = aes_gcm_decrypt ($message, $key);
 				$encode_radio_selected = " ";
 				$decode_radio_selected = " checked='checked' ";
 			} else {
-				$encoded = base64_encode(xor_this ($message, $key));
+				$encoded = aes_gcm_encrypt ($message, $key);
 			}
 		}
 		if (array_key_exists ('password', $_POST)) {
 			$password = $_POST['password'];
-			$decoded = xor_this (base64_decode ($password), $key);
-			if ($password == "Olifant") {
+			// Constant-time comparison to prevent timing attacks
+			if (hash_equals (hash ('sha256', "Olifant"), hash ('sha256', $password))) {
 				$success = "Welcome back user";
 			} else {
 				$errors = "Login Failed";
@@ -53,13 +64,13 @@ $html = "
 		<p>
 		This super secure system will allow you to exchange messages with your friends without anyone else being able to read them. Use the box below to encode and decode messages.
 		</p>
-		<form name=\"xor\" method='post' action=\"" . $_SERVER['PHP_SELF'] . "\">
+		<form name=\"aes\" method='post' action=\"" . $_SERVER['PHP_SELF'] . "\">
 			<p>
-				<label for='message'>Message:</lable><br />
+				<label for='message'>Message:</label><br />
 				<textarea style='width: 600px; height: 56px' id='message' name='message'>" . htmlentities ($message) . "</textarea>
 			</p>
 			<p>
-				<input type='radio' value='encode' name='direction' id='direction_encode' " . $encode_radio_selected . "><label for='direction_encode'>Encode</label> or 
+				<input type='radio' value='encode' name='direction' id='direction_encode' " . $encode_radio_selected . "><label for='direction_encode'>Encode</label> or
 				<input type='radio' value='decode' name='direction' id='direction_decode' " . $decode_radio_selected . "><label for='direction_decode'>Decode</label>
 			</p>
 			<p>
@@ -71,7 +82,7 @@ $html = "
 if (!is_null ($encoded)) {
 	$html .= "
 			<p>
-				<label for='encoded'>Message:</lable><br />
+				<label for='encoded'>Message:</label><br />
 				<textarea readonly='readonly' style='width: 600px; height: 56px' id='encoded' name='encoded'>" . htmlentities ($encoded) . "</textarea>
 			</p>";
 }
@@ -79,30 +90,27 @@ if (!is_null ($encoded)) {
 $html .= "
 		<hr>
 		<p>
-		You have intercepted the following message, decode it and log in below.
-		</p>
-		<p>
-		<textarea readonly='readonly' style='width: 600px; height: 28px' id='encoded' name='encoded'>Lg4WGlQZChhSFBYSEB8bBQtPGxdNQSwEHREOAQY=</textarea>
+		You have intercepted the following message. It is protected with authenticated encryption — decoding requires the correct key and IV.
 		</p>
 ";
 
 if ($errors != "") {
-	$html .= '<div class="warning">' . $errors . '</div>';
+	$html .= '<div class="warning">' . htmlentities ($errors) . '</div>';
 }
 
 if ($messages != "") {
-	$html .= '<div class="nearly">' . $messages . '</div>';
+	$html .= '<div class="nearly">' . htmlentities ($messages) . '</div>';
 }
 
 if ($success != "") {
-	$html .= '<div class="success">' . $success . '</div>';
+	$html .= '<div class="success">' . htmlentities ($success) . '</div>';
 }
 
 $html .= "
-		<form name=\"ecb\" method='post' action=\"" . $_SERVER['PHP_SELF'] . "\">
+		<form name=\"auth\" method='post' action=\"" . $_SERVER['PHP_SELF'] . "\">
 			<p>
-				<label for='password'>Password:</lable><br />
-<input type='password' id='password' name='password'>
+				<label for='password'>Password:</label><br />
+				<input type='password' id='password' name='password'>
 			</p>
 			<p>
 				<input type=\"submit\" value=\"Login\">

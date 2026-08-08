@@ -1,25 +1,22 @@
 <?php
 
-$headerCSP = "Content-Security-Policy: script-src 'self' 'unsafe-inline' 'nonce-TmV2ZXIgZ29pbmcgdG8gZ2l2ZSB5b3UgdXA=';";
+// Hardened: removed 'unsafe-inline' and the static (hardcoded) nonce.
+// A static nonce is equivalent to no nonce — an attacker who reads the source
+// can reuse it. CSP is now restricted to 'self' only, mirroring impossible.php.
+
+$headerCSP = "Content-Security-Policy: script-src 'self';";
 
 header($headerCSP);
 
-// Disable XSS protections so that inline alert boxes will work
-header ("X-XSS-Protection: 0");
-
-# <script nonce="TmV2ZXIgZ29pbmcgdG8gZ2l2ZSB5b3UgdXA=">alert(1)</script>
-
 ?>
 <?php
-if (isset ($_POST['include'])) {
-$page[ 'body' ] .= "
-	" . $_POST['include'] . "
-";
-}
 $page[ 'body' ] .= '
 <form name="csp" method="POST">
-	<p>Whatever you enter here gets dropped directly into the page, see if you can get an alert box to pop up.</p>
+	<p>The Content Security Policy for this page only permits scripts loaded from the same origin. Inline scripts and external sources are blocked.</p>
 	<input size="50" type="text" name="include" value="" id="include" />
-	<input type="submit" value="Include" />
+	<input type="submit" value="Submit" />
 </form>
 ';
+if (isset ($_POST['include'])) {
+	$page[ 'body' ] .= "<p>Submitted value: " . htmlspecialchars ($_POST['include'], ENT_QUOTES, 'UTF-8') . "</p>\n";
+}
