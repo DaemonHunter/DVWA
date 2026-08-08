@@ -1,18 +1,22 @@
 <?php
 
 if( isset( $_POST[ 'btnSign' ] ) ) {
+	// Check Anti-CSRF token
+	checkToken( $_REQUEST[ 'user_token' ], $_SESSION[ 'session_token' ], 'index.php' );
+
 	// Get input
 	$message = trim( $_POST[ 'mtxMessage' ] );
 	$name    = trim( $_POST[ 'txtName' ] );
 
 	// Sanitize message input
-	$message = strip_tags( addslashes( $message ) );
+	$message = stripslashes( $message );
 	$message = ((isset($GLOBALS["___mysqli_ston"]) && is_object($GLOBALS["___mysqli_ston"])) ? mysqli_real_escape_string($GLOBALS["___mysqli_ston"],  $message ) : ((trigger_error("[MySQLConverterToo] Fix the mysql_escape_string() call! This code does not work.", E_USER_ERROR)) ? "" : ""));
 	$message = htmlspecialchars( $message );
 
 	// Sanitize name input
-	$name = str_replace( '<script>', '', $name );
+	$name = stripslashes( $name );
 	$name = ((isset($GLOBALS["___mysqli_ston"]) && is_object($GLOBALS["___mysqli_ston"])) ? mysqli_real_escape_string($GLOBALS["___mysqli_ston"],  $name ) : ((trigger_error("[MySQLConverterToo] Fix the mysql_escape_string() call! This code does not work.", E_USER_ERROR)) ? "" : ""));
+	$name = htmlspecialchars( $name );
 
 	// Update database
 	$query  = "INSERT INTO guestbook ( comment, name ) VALUES ( '$message', '$name' );";
@@ -20,5 +24,8 @@ if( isset( $_POST[ 'btnSign' ] ) ) {
 
 	//mysql_close();
 }
+
+// Generate Anti-CSRF token
+generateSessionToken();
 
 ?>
