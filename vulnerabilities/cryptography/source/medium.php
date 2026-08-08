@@ -4,17 +4,17 @@
 // AES-256-GCM authenticated encryption. The GCM auth tag prevents ciphertext
 // manipulation; a fresh random IV per token prevents cut-and-paste attacks.
 
-require ("token_library_low.php");
+require ("token_library_medium.php");
 
 $message = "";
 
-$token_data = create_token_low();
+$token_data = create_token_medium();
 
 $html = "
 	<script>
 		function send_token() {
 
-			const url = 'source/check_token_low.php';
+			const url = 'source/check_token_medium.php';
 			const data = document.getElementById ('token').value;
 
 			console.log (data);
